@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deterministic Finite Automaton Minimization</title>
+<style>
+  :root {
+    --background-color: #f8f9fa;
+    --panel-background: #ffffff;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --border-color: #dee2e6;
+    --primary-color: #0d6efd;
+    --primary-hover: #0b5ed7;
+    --success-color: #198754;
+    --group-zero: #cfe2ff;
+    --group-one: #d1e7dd;
+    --group-two: #fff3cd;
+    --group-three: #f8d7da;
+    --group-four: #e2e3e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background-color: #212529;
+      --panel-background: #2c3034;
+      --text-primary: #f8f9fa;
+      --text-secondary: #adb5bd;
+      --border-color: #495057;
+      --primary-color: #0d6efd;
+      --group-zero: #032858;
+      --group-one: #055160;
+      --group-two: #664d03;
+      --group-three: #842029;
+      --group-four: #41464b;
+    }
+  }
+  body {
+    font-family: system-ui, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 20px;
+    line-height: 1.5;
+  }
+  .application-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 20px;
+  }
+  .input-panel, .results-panel {
+    background-color: var(--panel-background);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+  }
+  label {
+    display: block;
+    margin-top: 10px;
+    font-size: 14px;
+    color: var(--text-secondary);
+  }
+  input, textarea {
+    width: 100%;
+    padding: 8px;
+    margin-top: 4px;
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 4px;
+    box-sizing: border-box;
+  }
+  button {
+    margin-top: 15px;
+    padding: 10px 15px;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:hover {
+    background-color: var(--primary-hover);
+  }
+  .canvas-container {
+    border: 1px solid var(--border-color);
+    background-color: var(--background-color);
+    border-radius: 8px;
+    margin-top: 20px;
+    overflow: hidden;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 14px;
+  }
+  th, td {
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    text-align: center;
+  }
+  th {
+    background-color: var(--background-color);
+  }
+  .step-container {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px solid var(--border-color);
+  }
+  .group-indicator {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    margin-right: 5px;
+    border: 1px solid var(--border-color);
+  }
+</style>
+</head>
+<body>
+
+<div class="application-container">
+  <div class="input-panel">
+    <h2>Define Automaton</h2>
+    <label>States (comma separated)</label>
+    <input type="text" id="input-states" value="q0, q1, q2, q3, q4">
+    
+    <label>Alphabet (comma separated)</label>
+    <input type="text" id="input-alphabet" value="a, b">
+    
+    <label>Start State</label>
+    <input type="text" id="input-start" value="q0">
+    
+    <label>Accepting States (comma separated)</label>
+    <input type="text" id="input-accept" value="q3, q4">
+    
+    <label>Transitions (State, Symbol, Target State)</label>
+    <textarea id="input-transitions" rows="12">
+q0, a, q1
+q0, b, q2
+q1, a, q1
+q1, b, q3
+q2, a, q4
+q2, b, q2
+q3, a, q1
+q3, b, q3
+q4, a, q4
+q4, b, q2</textarea>
+    
+    <button onclick="executeMinimization()">Minimize Automaton</button>
+  </div>
+
+  <div class="results-panel" id="results-area" style="display: none;">
+    <h2>Original Automaton</h2>
+    <div class="canvas-container" id="original-canvas"></div>
+    
+    <div id="algorithm-steps"></div>
+    
+    <h2>Minimized Automaton</h2>
+    <div class="canvas-container" id="minimized-canvas"></div>
+  </div>
+</div>
+
+<script>
+const groupColors = ['var(--group-zero)', 'var(--group-one)', 'var(--group-two)', 'var(--group-three)', 'var(--group-four)'];
+
+function parseInputData() {
+  const states = document.getElementById('input-states').value.split(',').map(string => string.trim());
+  const alphabet = document.getElementById('input-alphabet').value.split(',').map(string => string.trim());
+  const startState = document.getElementById('input-start').value.trim();
+  const acceptStates = new Set(document.getElementById('input-accept').value.split(',').map(string => string.trim()));
+  
+  const transitions = {};
+  states.forEach(state => transitions[state] = {});
+  
+  const lines = document.getElementById('input-transitions').value.split('\n');
+  lines.forEach(line => {
+    const parts = line.split(',').map(string => string.trim());
+    if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+      transitions[parts[0]][parts[1]] = parts[2];
+    }
+  });
+  
+  return { states, alphabet, startState, acceptStates, transitions };
+}
+
+function executeMinimization() {
+  const automaton = parseInputData();
+  document.getElementById('results-area').style.display = 'block';
+  
+  drawAutomatonGraph(automaton, 'original-canvas');
+  
+  const unreachableRemoved = removeUnreachableStates(automaton);
+  const minimizationSteps = performEquivalencePartitioning(unreachableRemoved);
+  
+  renderAlgorithmSteps(minimizationSteps, unreachableRemoved.alphabet);
+  
+  const minimizedAutomaton = constructMinimizedAutomaton(unreachableRemoved, minimizationSteps[minimizationSteps.length - 1]);
+  drawAutomatonGraph(minimizedAutomaton, 'minimized-canvas');
+  
+  // New: Render the transition table for the minimized DFA
+  renderMinimizedTable(minimizedAutomaton);
+}
+
+function renderMinimizedTable(minimized) {
+  const container = document.getElementById('minimized-canvas');
+  
+  let tableHtml = `<div style="padding: 20px;">`;
+  tableHtml += `<h3>Minimized Transition Table</h3>`;
+  tableHtml += `<table><thead><tr><th>State</th>`;
+  
+  minimized.alphabet.forEach(symbol => {
+    tableHtml += `<th>${symbol}</th>`;
+  });
+  tableHtml += `</tr></thead><tbody>`;
+  
+  minimized.states.forEach(state => {
+    const isStart = state === minimized.startState;
+    const isAccept = minimized.acceptStates.has(state);
+    let label = state;
+    if (isStart) label = '→ ' + label;
+    if (isAccept) label = '* ' + label;
+
+    tableHtml += `<tr><td><strong>${label}</strong></td>`;
+    minimized.alphabet.forEach(symbol => {
+      const target = minimized.transitions[state][symbol] || '-';
+      tableHtml += `<td>${target}</td>`;
+    });
+    tableHtml += `</tr>`;
+  });
+  
+  tableHtml += `</tbody></table>`;
+  tableHtml += `<p style="font-size: 12px; color: var(--text-secondary); margin-top: 10px;">
+    (→ indicates Start State, * indicates Accepting State)
+  </p></div>`;
+  
+  container.innerHTML += tableHtml;
+}
+function removeUnreachableStates(automaton) {
+  const visited = new Set([automaton.startState]);
+  const queue = [automaton.startState];
+  
+  while (queue.length > 0) {
+    const currentState = queue.shift();
+    automaton.alphabet.forEach(symbol => {
+      const targetState = automaton.transitions[currentState][symbol];
+      if (targetState && !visited.has(targetState)) {
+        visited.add(targetState);
+        queue.push(targetState);
+      }
+    });
+  }
+  
+  return {
+    states: automaton.states.filter(state => visited.has(state)),
+    alphabet: automaton.alphabet,
+    startState: automaton.startState,
+    acceptStates: new Set([...automaton.acceptStates].filter(state => visited.has(state))),
+    transitions: automaton.transitions
+  };
+}
+
+function performEquivalencePartitioning(automaton) {
+  const steps = [];
+  const accepting = automaton.states.filter(state => automaton.acceptStates.has(state));
+  const nonAccepting = automaton.states.filter(state => !automaton.acceptStates.has(state));
+  
+  let currentPartitions = [];
+  if (nonAccepting.length > 0) currentPartitions.push(nonAccepting);
+  if (accepting.length > 0) currentPartitions.push(accepting);
+  
+  steps.push({ iteration: 0, partitions: currentPartitions, details: [] });
+  
+  let iterationCount = 1;
+  let changed = true;
+  
+  while (changed) {
+    changed = false;
+    const nextPartitions = [];
+    const stepDetails = [];
+    
+    const stateToGroupMap = {};
+    currentPartitions.forEach((group, groupIndex) => {
+      group.forEach(state => stateToGroupMap[state] = groupIndex);
+    });
+    
+    currentPartitions.forEach((group, originalGroupIndex) => {
+      const signatures = {};
+      group.forEach(state => {
+        const signatureArray = automaton.alphabet.map(symbol => {
+          const target = automaton.transitions[state][symbol];
+          return target ? stateToGroupMap[target] : -1;
+        });
+        const signatureString = signatureArray.join(',');
+        
+        if (!signatures[signatureString]) signatures[signatureString] = [];
+        signatures[signatureString].push(state);
+      });
+      
+      const newGroups = Object.values(signatures);
+      if (newGroups.length > 1) changed = true;
+      
+      newGroups.forEach(newGroup => nextPartitions.push(newGroup));
+      
+      stepDetails.push({
+        originalGroup: group,
+        originalGroupIndex: originalGroupIndex,
+        subGroups: signatures
+      });
+    });
+    
+    if (changed) {
+      steps.push({ iteration: iterationCount, partitions: nextPartitions, details: stepDetails });
+      currentPartitions = nextPartitions;
+      iterationCount++;
+    }
+  }
+  
+  return steps;
+}
+
+function renderAlgorithmSteps(steps, alphabet) {
+  const container = document.getElementById('algorithm-steps');
+  container.innerHTML = '';
+  
+  steps.forEach((step, index) => {
+    let stepHypertext = `<div class="step-container">`;
+    stepHypertext += `<h3>Iteration ${step.iteration}: Partitioning</h3>`;
+    
+    if (index === 0) {
+      stepHypertext += `<p>Initial split based on accepting versus non-accepting states.</p>`;
+    } else {
+      stepHypertext += `<p>Checking transition signatures to find distinguishable states.</p>`;
+      
+      const previousStep = steps[index - 1];
+      const previousStateToGroupMap = {};
+      previousStep.partitions.forEach((group, groupIndex) => {
+        group.forEach(state => previousStateToGroupMap[state] = groupIndex);
+      });
+      
+      step.details.forEach(detail => {
+        if (Object.keys(detail.subGroups).length > 1) {
+          stepHypertext += `<h4>Group ${detail.originalGroupIndex} Splits:</h4>`;
+          stepHypertext += `<table><tr><th>State</th>`;
+          alphabet.forEach(symbol => stepHypertext += `<th>On '${symbol}' goes to Group</th>`);
+          stepHypertext += `</tr>`;
+          
+          Object.entries(detail.subGroups).forEach(([signature, states]) => {
+            const targets = signature.split(',');
+            states.forEach(state => {
+              stepHypertext += `<tr><td>${state}</td>`;
+              targets.forEach(target => {
+                const color = target >= 0 ? groupColors[target % groupColors.length] : 'transparent';
+                stepHypertext += `<td><span class="group-indicator" style="background-color: ${color}">Group ${target}</span></td>`;
+              });
+              stepHypertext += `</tr>`;
+            });
+          });
+          stepHypertext += `</table>`;
+        }
+      });
+    }
+    
+    stepHypertext += `<div style="margin-top: 10px;"><strong>Current Equivalence Classes:</strong><br>`;
+    step.partitions.forEach((group, groupIndex) => {
+      const color = groupColors[groupIndex % groupColors.length];
+      stepHypertext += `<span class="group-indicator" style="background-color: ${color}">Group ${groupIndex}: { ${group.join(', ')} }</span>`;
+    });
+    stepHypertext += `</div></div>`;
+    
+    container.innerHTML += stepHypertext;
+  });
+}
+
+function constructMinimizedAutomaton(originalAutomaton, finalStep) {
+  const stateToGroupMap = {};
+  finalStep.partitions.forEach((group, index) => {
+    group.forEach(state => stateToGroupMap[state] = index);
+  });
+  
+  const minimizedStates = finalStep.partitions.map((_, index) => `M${index}`);
+  const minimizedStart = `M${stateToGroupMap[originalAutomaton.startState]}`;
+  const minimizedAccept = new Set();
+  
+  finalStep.partitions.forEach((group, index) => {
+    if (group.some(state => originalAutomaton.acceptStates.has(state))) {
+      minimizedAccept.add(`M${index}`);
+    }
+  });
+  
+  const minimizedTransitions = {};
+  finalStep.partitions.forEach((group, index) => {
+    const representativeState = group[0];
+    minimizedTransitions[`M${index}`] = {};
+    
+    originalAutomaton.alphabet.forEach(symbol => {
+      const targetOriginal = originalAutomaton.transitions[representativeState][symbol];
+      if (targetOriginal) {
+        minimizedTransitions[`M${index}`][symbol] = `M${stateToGroupMap[targetOriginal]}`;
+      }
+    });
+  });
+  
+  return {
+    states: minimizedStates,
+    alphabet: originalAutomaton.alphabet,
+    startState: minimizedStart,
+    acceptStates: minimizedAccept,
+    transitions: minimizedTransitions
+  };
+}
+
+function drawAutomatonGraph(automaton, containerIdentifier) {
+  const container = document.getElementById(containerIdentifier);
+  const statesCount = automaton.states.length;
+  const canvasWidth = 800;
+  const canvasHeight = 400;
+  const circleRadius = 25;
+  const layoutRadius = Math.min(150, 50 + statesCount * 20);
+  const centerX = canvasWidth / 2;
+  const centerY = canvasHeight / 2;
+  
+  const positions = {};
+  automaton.states.forEach((state, index) => {
+    const angle = (2 * Math.PI * index / statesCount) - (Math.PI / 2);
+    positions[state] = {
+      x: centerX + layoutRadius * Math.cos(angle),
+      y: centerY + layoutRadius * Math.sin(angle)
+    };
+  });
+  
+  let graphicsString = `<svg viewBox="0 0 ${canvasWidth} ${canvasHeight}" xmlns="http://www.w3.org/2000/svg">`;
+  
+  const startPosition = positions[automaton.startState];
+  if (startPosition) {
+    const arrowStartX = startPosition.x - 60;
+    const arrowStartY = startPosition.y;
+    const targetEdgeX = startPosition.x - circleRadius;
+    graphicsString += `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${targetEdgeX}" y2="${arrowStartY}" stroke="var(--text-secondary)" stroke-width="2" />`;
+    graphicsString += `<polygon points="${targetEdgeX},${arrowStartY} ${targetEdgeX-10},${arrowStartY-5} ${targetEdgeX-10},${arrowStartY+5}" fill="var(--text-secondary)" />`;
+    graphicsString += `<text x="${arrowStartX - 5}" y="${arrowStartY + 4}" text-anchor="end" font-size="12" fill="var(--text-secondary)">Start</text>`;
+  }
+  
+  const drawnEdges = {};
+  
+  Object.entries(automaton.transitions).forEach(([source, symbolTargets]) => {
+    Object.entries(symbolTargets).forEach(([symbol, target]) => {
+      const sourcePos = positions[source];
+      const targetPos = positions[target];
+      if (!sourcePos || !targetPos) return;
+      
+      const edgeKey = `${source}-${target}`;
+      if (!drawnEdges[edgeKey]) drawnEdges[edgeKey] = [];
+      drawnEdges[edgeKey].push(symbol);
+    });
+  });
+  
+  Object.entries(drawnEdges).forEach(([edgeKey, symbols]) => {
+    const [source, target] = edgeKey.split('-');
+    const sourcePos = positions[source];
+    const targetPos = positions[target];
+    const label = symbols.join(', ');
+    
+    if (source === target) {
+      const loopTopY = sourcePos.y - circleRadius - 30;
+      graphicsString += `<path d="M ${sourcePos.x - 10} ${sourcePos.y - circleRadius + 2} C ${sourcePos.x - 30} ${loopTopY}, ${sourcePos.x + 30} ${loopTopY}, ${sourcePos.x + 10} ${sourcePos.y - circleRadius + 2}" fill="none" stroke="var(--text-secondary)" stroke-width="1.5" />`;
+      graphicsString += `<polygon points="${sourcePos.x + 10},${sourcePos.y - circleRadius + 2} ${sourcePos.x + 15},${sourcePos.y - circleRadius - 8} ${sourcePos.x + 5},${sourcePos.y - circleRadius - 6}" fill="var(--text-secondary)" />`;
+      graphicsString += `<text x="${sourcePos.x}" y="${loopTopY + 5}" text-anchor="middle" font-size="12" fill="var(--text-secondary)">${label}</text>`;
+    } else {
+      const deltaX = targetPos.x - sourcePos.x;
+      const deltaY = targetPos.y - sourcePos.y;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      
+      const unitX = deltaX / distance;
+      const unitY = deltaY / distance;
+      
+      const edgeSourceX = sourcePos.x + unitX * circleRadius;
+      const edgeSourceY = sourcePos.y + unitY * circleRadius;
+      
+      const edgeTargetX = targetPos.x - unitX * circleRadius;
+      const edgeTargetY = targetPos.y - unitY * circleRadius;
+      
+      const isBidirectional = drawnEdges[`${target}-${source}`] !== undefined;
+      const offsetMultiplier = isBidirectional ? 15 : 0;
+      
+      const normalX = -unitY;
+      const normalY = unitX;
+      
+      const controlPointX = (edgeSourceX + edgeTargetX) / 2 + normalX * offsetMultiplier;
+      const controlPointY = (edgeSourceY + edgeTargetY) / 2 + normalY * offsetMultiplier;
+      
+      graphicsString += `<path d="M ${edgeSourceX} ${edgeSourceY} Q ${controlPointX} ${controlPointY} ${edgeTargetX} ${edgeTargetY}" fill="none" stroke="var(--text-secondary)" stroke-width="1.5" />`;
+      
+      const arrowAngle = Math.atan2(edgeTargetY - controlPointY, edgeTargetX - controlPointX);
+      const arrowPoint1X = edgeTargetX - 10 * Math.cos(arrowAngle - Math.PI / 6);
+      const arrowPoint1Y = edgeTargetY - 10 * Math.sin(arrowAngle - Math.PI / 6);
+      const arrowPoint2X = edgeTargetX - 10 * Math.cos(arrowAngle + Math.PI / 6);
+      const arrowPoint2Y = edgeTargetY - 10 * Math.sin(arrowAngle + Math.PI / 6);
+      
+      graphicsString += `<polygon points="${edgeTargetX},${edgeTargetY} ${arrowPoint1X},${arrowPoint1Y} ${arrowPoint2X},${arrowPoint2Y}" fill="var(--text-secondary)" />`;
+      
+      graphicsString += `<text x="${controlPointX}" y="${controlPointY - 5}" text-anchor="middle" font-size="12" fill="var(--text-primary)">${label}</text>`;
+    }
+  });
+  
+  automaton.states.forEach(state => {
+    const pos = positions[state];
+    const isAccepting = automaton.acceptStates.has(state);
+    
+    graphicsString += `<circle cx="${pos.x}" cy="${pos.y}" r="${circleRadius}" fill="var(--panel-background)" stroke="var(--text-primary)" stroke-width="2" />`;
+    
+    if (isAccepting) {
+      graphicsString += `<circle cx="${pos.x}" cy="${pos.y}" r="${circleRadius - 4}" fill="none" stroke="var(--text-primary)" stroke-width="1" />`;
+    }
+    
+    graphicsString += `<text x="${pos.x}" y="${pos.y + 4}" text-anchor="middle" font-size="14" fill="var(--text-primary)">${state}</text>`;
+  });
+  
+  graphicsString += `</svg>`;
+  container.innerHTML = graphicsString;
+}
+</script>
+</body>
+</html>
