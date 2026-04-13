@@ -130,26 +130,28 @@
     <input type="text" id="input-states" value="q0, q1, q2, q3, q4">
     
     <label>Alphabet (comma separated)</label>
-    <input type="text" id="input-alphabet" value="a, b">
+    <input type="text" id="input-alphabet" value="0, 1">
     
     <label>Start State</label>
     <input type="text" id="input-start" value="q0">
     
     <label>Accepting States (comma separated)</label>
-    <input type="text" id="input-accept" value="q3, q4">
+    <input type="text" id="input-accept" value="q2, q4, q5">
     
     <label>Transitions (State, Symbol, Target State)</label>
     <textarea id="input-transitions" rows="12">
-q0, a, q1
-q0, b, q2
-q1, a, q1
-q1, b, q3
-q2, a, q4
-q2, b, q2
-q3, a, q1
-q3, b, q3
-q4, a, q4
-q4, b, q2</textarea>
+q0,0,q1
+q0,1,q3
+q1,0,q2
+q1,1,q4
+q2,0,q2
+q2,1,q2
+q3,0,q4
+q3,1,q2
+q4,0,q5
+q4,1,q5
+q5,0,q4
+q5,1,q4</textarea>
     
     <button onclick="executeMinimization()">Minimize Automaton</button>
   </div>
