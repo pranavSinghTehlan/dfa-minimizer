@@ -1,6 +1,6 @@
 # DFA Minimizer
 
-A web-based application for minimizing Deterministic Finite Automata (DFA) using the Myhill–Nerode theorem and equivalence partitioning. The tool provides an interactive interface to define a DFA, visualize its structure, and observe the minimization process step by step.
+A web-based application for minimizing Deterministic Finite Automata (DFA) using the Moore's Algorithm and equivalence partitioning. The tool provides an interactive interface to define a DFA, visualize its structure, and observe the minimization process step by step.
 
 ## Live Demo
 
